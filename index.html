@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Telégrafo em Código Morse</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Telégrafo em Código Morse</h1>
+      <span class="badge">HTML • CSS • JS</span>
+    </header>
+
+    <!-- Codificador / Decodificador -->
+    <section class="card" aria-labelledby="conv-hd">
+      <div class="hd">
+        <strong id="conv-hd">Conversor</strong>
+        <span class="small">Digite texto ⟷ Morse • Suporta A–Z, 0–9 e pontuação básica</span>
+      </div>
+      <div class="bd">
+        <div class="row cols-2">
+          <div class="field">
+            <label class="small" for="plain">Texto</label>
+            <textarea id="plain" placeholder="Ex.: S.O.S precisamos de ajuda!"></textarea>
+            <div class="btns mt-10">
+              <button class="primary" id="toMorse" type="button">Codificar → Morse</button>
+              <button class="ghost" id="clearText" type="button">Limpar</button>
+            </div>
+          </div>
+          <div class="field">
+            <label class="small" for="morse">Morse</label>
+            <textarea id="morse" placeholder="Ex.: ... --- ... / .--. .-. . -.-. .. ... .- -- --- ..."></textarea>
+            <div class="btns mt-10">
+              <button class="primary" id="toText" type="button">Decodificar → Texto</button>
+              <button class="ghost" id="clearMorse" type="button">Limpar</button>
+            </div>
+          </div>
+        </div>
+        <div class="btns mt-12">
+          <button id="playAudio" type="button">▶ Reproduzir Morse (áudio)</button>
+          <button id="stopAudio" type="button">⏹ Parar</button>
+          <div class="flex" style="margin-left:auto">
+            <span class="small">LED</span>
+            <div class="led" id="led" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="row cols-3 mt-12">
+          <div class="slider">
+            <label class="small" for="wpm">WPM</label>
+            <input id="wpm" type="range" min="5" max="40" value="18"/><span class="small" id="wpmVal">18</span>
+          </div>
+          <div class="slider">
+            <label class="small" for="freq">Frequência (Hz)</label>
+            <input id="freq" type="range" min="200" max="1200" value="600"/><span class="small" id="freqVal">600</span>
+          </div>
+          <div class="slider">
+            <label class="small" for="vol">Volume</label>
+            <input id="vol" type="range" min="0" max="1" step="0.01" value="0.3"/><span class="small" id="volVal">0.30</span>
+          </div>
+        </div>
+        <div class="row mt-12">
+          <p class="hint small">Dica: use a barra de espaço para o manipulador (chave) do telégrafo na seção abaixo.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Manipulador (Chave) -->
+    <section class="card" aria-labelledby="manip-hd">
+      <div class="hd">
+        <strong id="manip-hd">Manipulador</strong>
+        <span class="small">Clique/segure ou pressione <b class="mono">Espaço</b> para emitir. O app detecta ponto/traço automaticamente.</span>
+      </div>
+      <div class="bd">
+        <div class="key" id="key" tabindex="0" role="button" aria-pressed="false" aria-label="Manipulador Morse">
+          <div class="flex" style="justify-content:center; gap:18px">
+            <div class="led" id="keyLed" aria-hidden="true"></div>
+            <div>
+              <div class="mono" id="keyState">Solto</div>
+              <div class="small">Pressione e segure para <b>tom</b>; soltar define ponto (·) ou traço (–) conforme a duração.</div>
+            </div>
+          </div>
+        </div>
+        <div class="row cols-2 mt-12">
+          <div class="field">
+            <label class="small">Sinal capturado</label>
+            <div class="output mono" id="capture" aria-live="polite">(vazio)</div>
+          </div>
+          <div class="field">
+            <label class="small">Texto decodificado</label>
+            <div class="output" id="captureText" aria-live="polite">(vazio)</div>
+          </div>
+        </div>
+        <div class="row cols-3 mt-12">
+          <div class="slider">
+            <label class="small" for="thDotDash">Limiar ponto/traço (× unidade)</label>
+            <input id="thDotDash" type="range" min="1.5" max="3.5" step="0.1" value="2.2"/><span class="small" id="thVal">2.2</span>
+          </div>
+          <div class="slider">
+            <label class="small" for="thLetter">Intervalo letra (fixo)</label>
+            <input id="thLetter" type="range" min="2" max="5" step="0.1" value="3" disabled/><span class="small" id="thLetterVal">1.5s</span>
+          </div>
+          <div class="slider">
+            <label class="small" for="thWord">Intervalo palavra (× unidade)</label>
+            <input id="thWord" type="range" min="5" max="9" step="0.1" value="7"/><span class="small" id="thWordVal">7.0</span>
+          </div>
+        </div>
+        <div class="btns mt-12">
+          <button class="ghost" id="clearCapture" type="button">Limpar captura</button>
+          <div class="spacer"></div>
+          <div class="meter" aria-hidden="true"><i id="meterFill"></i></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tabela Morse -->
+    <section class="card" aria-labelledby="tbl-hd">
+      <div class="hd"><strong id="tbl-hd">Tabela de Referência (ITU)</strong><span class="small">Clique para copiar o código</span></div>
+      <div class="bd">
+        <div class="table" id="table"></div>
+      </div>
+    </section>
+
+    <!-- Log -->
+    <section class="card" aria-labelledby="log-hd">
+      <div class="hd"><strong id="log-hd">Log</strong><span class="small">Eventos e avisos</span></div>
+      <div class="bd">
+        <div class="output mono" id="log" style="min-height:48px" aria-live="polite"></div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
