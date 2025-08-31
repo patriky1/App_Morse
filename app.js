@@ -15,35 +15,20 @@
   const clamp01 = x => Math.max(0, Math.min(1, x));
 
   // ---- Normalizações ----
-  const normalizeText = s =>
-    s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
-
-  // aceita ., ·, • e - – — como pontos/traços; normaliza separadores
+  const normalizeText = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
   const normalizeMorse = s => s
-    .replace(/[•·]/g, '.')
-    .replace(/[—–]/g, '-')
-    .replace(/[|]+/g, '/')
-    .replace(/\s*\/\s*/g, ' / ')
-    .replace(/[^\.\-\/\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/[•·]/g, '.').replace(/[—–]/g, '-').replace(/[|]+/g, '/')
+    .replace(/\s*\/\s*/g, ' / ').replace(/[^\.\-\/\s]/g, ' ').replace(/\s+/g, ' ').trim();
 
-  // ====== Conversão Texto ⇄ Morse ======
+  // ====== Conversão ======
   function textToMorse(str){
     const clean = normalizeText(str);
-    return clean
-      .split(/\s+/)
-      .map(word => word.split('').map(ch => MAP[ch] || '').filter(Boolean).join(' '))
-      .filter(Boolean)
-      .join(' / ');
+    return clean.split(/\s+/).map(w => w.split('').map(ch => MAP[ch] || '').filter(Boolean).join(' ')).filter(Boolean).join(' / ');
   }
   function morseToText(code){
     const norm = normalizeMorse(code);
     if(!norm) return '';
-    return norm
-      .split(/\s*\/\s*/)
-      .map(word => word.trim().split(/\s+/).map(seq => REVERSE[seq] || '�').join(''))
-      .join(' ');
+    return norm.split(/\s*\/\s*/).map(w => w.trim().split(/\s+/).map(seq => REVERSE[seq] || '�').join('')).join(' ');
   }
 
   // ====== Áudio (WebAudio) + LED ======
@@ -52,24 +37,11 @@
 
   function ensureAudio(){
     if(!actx) actx = new (window.AudioContext || window.webkitAudioContext)({latencyHint:'interactive'});
-    if(!gain){
-      gain = actx.createGain();
-      gain.gain.value = 0.00001;
-      gain.connect(actx.destination);
-    }
-    if(!osc){
-      osc = actx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.value = Number(el('freq').value);
-      osc.connect(gain);
-      osc.start();
-    }
+    if(!gain){ gain = actx.createGain(); gain.gain.value = 0.00001; gain.connect(actx.destination); }
+    if(!osc){ osc = actx.createOscillator(); osc.type = 'sine'; osc.frequency.value = Number(el('freq').value); osc.connect(gain); osc.start(); }
   }
   async function armAudioOnFirstGesture(){
-    try{
-      ensureAudio();
-      if(actx.state !== 'running') await actx.resume();
-    }catch(e){ log('Áudio bloqueado pelo navegador: '+e.message); }
+    try{ ensureAudio(); if(actx.state !== 'running') await actx.resume(); }catch(e){ log('Áudio bloqueado pelo navegador: '+e.message); }
   }
   function tone(on){
     ensureAudio();
@@ -80,24 +52,15 @@
     led.classList.toggle('on', !!on);
   }
 
-  el('freq').addEventListener('input', e => {
-    el('freqVal').textContent = e.target.value;
-    ensureAudio(); osc.frequency.setValueAtTime(Number(e.target.value), actx?.currentTime || 0);
-  }, {passive:true});
-  el('vol').addEventListener('input', e => {
-    const v = Number(e.target.value);
-    el('volVal').textContent = v.toFixed(2);
-    if(gain) gain.gain.setValueAtTime(clamp01(v), actx?.currentTime || 0);
-  }, {passive:true});
+  el('freq').addEventListener('input', e => { el('freqVal').textContent = e.target.value; ensureAudio(); osc.frequency.setValueAtTime(Number(e.target.value), actx?.currentTime || 0); }, {passive:true});
+  el('vol').addEventListener('input', e => { const v = Number(e.target.value); el('volVal').textContent = v.toFixed(2); if(gain) gain.gain.setValueAtTime(clamp01(v), actx?.currentTime || 0); }, {passive:true});
   el('wpm').addEventListener('input', e => { el('wpmVal').textContent = e.target.value; }, {passive:true});
-
   document.addEventListener('visibilitychange', () => { if(document.hidden){ stopPlayback(); tone(false);} });
 
   // ====== Player ======
   let playing = false, abortPlay = false;
-
   const unitFromWPM = wpm => 1200 / Number(wpm); // ms
-  const seqToTokens = (seq) => {
+  const seqToTokens = seq => {
     const tokens = [];
     for(const ch of seq){
       if(ch === '.') tokens.push({on:1, off:1});
@@ -107,50 +70,35 @@
     }
     return tokens;
   };
-
   async function playSeq(seq){
     const normalized = normalizeMorse(seq || '');
     if(!normalized) return;
     const unit = unitFromWPM(el('wpm').value);
     const tokens = seqToTokens(normalized + ' ');
     const wait = ms => new Promise(r => setTimeout(r, ms));
-
     abortPlay = false; playing = true;
     try{
       await armAudioOnFirstGesture();
       for(const tk of tokens){
         if(abortPlay) break;
-        if(tk.on){
-          tone(true); await wait(tk.on * unit);
-          tone(false); await wait(tk.off * unit);
-        } else if(tk.gap){
-          await wait(tk.gap * unit);
-        }
+        if(tk.on){ tone(true); await wait(tk.on * unit); tone(false); await wait(tk.off * unit); }
+        else if(tk.gap){ await wait(tk.gap * unit); }
       }
-    } finally {
-      playing = false; abortPlay = false; tone(false);
-    }
+    } finally { playing = false; abortPlay = false; tone(false); }
   }
-
   function stopPlayback(){ abortPlay = true; }
 
   // ====== UI Conversor ======
   const plain = el('plain');
   const morse = el('morse');
-
   el('toMorse').addEventListener('click', () => { morse.value = textToMorse(plain.value); });
   el('toText').addEventListener('click', () => { morse.value = normalizeMorse(morse.value); plain.value = morseToText(morse.value); });
   el('clearText').addEventListener('click', () => { plain.value = ''; });
   el('clearMorse').addEventListener('click', () => { morse.value = ''; });
-
   el('playAudio').addEventListener('click', async () => {
     const seq = morse.value.trim() || textToMorse(plain.value);
     if(!seq){ log('Nada para reproduzir.'); return; }
-    el('playAudio').disabled = true;
-    log('Reproduzindo...');
-    await playSeq(seq);
-    el('playAudio').disabled = false;
-    if(!abortPlay) log('Concluído.');
+    el('playAudio').disabled = true; log('Reproduzindo...'); await playSeq(seq); el('playAudio').disabled = false; if(!abortPlay) log('Concluído.');
   });
   el('stopAudio').addEventListener('click', () => { stopPlayback(); tone(false); });
 
@@ -170,26 +118,15 @@
   const updateMeter = p => { meterFill.style.width = (Math.max(0, Math.min(100, p*100))).toFixed(2)+'%'; };
 
   function startKey(){
-    clearTimeout(letterTimer);
-    clearTimeout(wordTimer);
-    letterTimer = wordTimer = null;
-
-    armAudioOnFirstGesture();
-    tone(true);
-    key.classList.add('active');
-    key.setAttribute('aria-pressed', 'true');
-    keyLed.classList.add('on');
-    keyState.textContent = 'Transmitindo';
+    clearTimeout(letterTimer); clearTimeout(wordTimer); letterTimer = wordTimer = null;
+    armAudioOnFirstGesture(); tone(true);
+    key.classList.add('active'); key.setAttribute('aria-pressed', 'true'); keyLed.classList.add('on'); keyState.textContent = 'Transmitindo';
     keyDownAt = performance.now();
   }
   function stopKey(){
     tone(false);
-    key.classList.remove('active');
-    key.setAttribute('aria-pressed', 'false');
-    keyLed.classList.remove('on');
-    keyState.textContent = 'Solto';
+    key.classList.remove('active'); key.setAttribute('aria-pressed', 'false'); keyLed.classList.remove('on'); keyState.textContent = 'Solto';
     keyUpAt = performance.now();
-
     const press = keyUpAt - keyDownAt;
     const u = unitMs();
     const dotDashThreshold = Number(el('thDotDash').value) * u; // ponto < th, traço >= th
@@ -197,59 +134,58 @@
     renderCapture();
     scheduleGapDetection();
   }
-
-  // Dois timers: 1.5s letra, 3.5s palavra
   function scheduleGapDetection(){
-    clearTimeout(letterTimer);
-    clearTimeout(wordTimer);
-
+    clearTimeout(letterTimer); clearTimeout(wordTimer);
     letterTimer = setTimeout(() => {
-      if (!/\s$/.test(captureSeq) && !/\s\/\s$/.test(captureSeq)) {
-        captureSeq += ' ';
-        renderCapture();
-      }
+      if (!/\s$/.test(captureSeq) && !/\s\/\s$/.test(captureSeq)) { captureSeq += ' '; renderCapture(); }
     }, 1500);
-
     wordTimer = setTimeout(() => {
       if (/\s\/\s$/.test(captureSeq)) return;
-      if (/\s$/.test(captureSeq)) {
-        captureSeq = captureSeq.replace(/\s+$/, ' / ');
-      } else {
-        captureSeq += ' / ';
-      }
+      if (/\s$/.test(captureSeq)) { captureSeq = captureSeq.replace(/\s+$/, ' / '); }
+      else { captureSeq += ' / '; }
       renderCapture();
     }, 3500);
   }
-
   function renderCapture(){
     const trimmed = captureSeq.trim();
     capture.textContent = trimmed || '(vazio)';
     captureText.textContent = trimmed ? morseToText(trimmed) : '(vazio)';
   }
 
-  // Eventos do manipulador
-  const downEv = e => {
-    if(e.type === 'keydown'){
-      if(e.code !== 'Space' || e.repeat) return;
-      e.preventDefault();
-    }
+  // ---- Eventos: Pointer Events (não bloqueiam scroll do body)
+  const onPointerDown = (e) => {
+    // só impede o default dentro da tecla (para não selecionar/arrastar), o body continua rolando fora
+    e.preventDefault();
     if(playing) stopPlayback();
+    // captura o ponteiro para receber o pointerup mesmo se o dedo sair da área
+    try { key.setPointerCapture(e.pointerId); } catch {}
     startKey();
   };
-  const upEv = e => {
-    if(e.type === 'keyup'){
-      if(e.code !== 'Space') return;
-      e.preventDefault();
-    }
+  const onPointerUp = (e) => {
+    try { key.releasePointerCapture(e.pointerId); } catch {}
     stopKey();
   };
+  const onPointerCancel = () => {
+    if(key.classList.contains('active')) stopKey();
+  };
 
-  key.addEventListener('mousedown', downEv);
-  window.addEventListener('mouseup', upEv);
-  window.addEventListener('touchstart', e => { e.preventDefault(); downEv(e); }, {passive:false});
-  window.addEventListener('touchend',   e => { e.preventDefault(); upEv(e);   }, {passive:false});
-  window.addEventListener('keydown', downEv);
-  window.addEventListener('keyup',   upEv);
+  // registra somente na tecla; nada no window
+  key.addEventListener('pointerdown', onPointerDown);
+  key.addEventListener('pointerup', onPointerUp);
+  key.addEventListener('pointercancel', onPointerCancel);
+
+  // teclado continua funcionando
+  window.addEventListener('keydown', (e) => {
+    if(e.code !== 'Space' || e.repeat) return;
+    e.preventDefault();
+    if(playing) stopPlayback();
+    startKey();
+  });
+  window.addEventListener('keyup', (e) => {
+    if(e.code !== 'Space') return;
+    e.preventDefault();
+    stopKey();
+  });
 
   // Visual: meter
   const loop = () => {
@@ -263,9 +199,8 @@
 
   // Sliders thresholds UI
   el('thDotDash').addEventListener('input', e => el('thVal').textContent = Number(e.target.value).toFixed(1), {passive:true});
-  el('thLetter').disabled = true;
-  el('thLetterVal').textContent = '1.5s';
-  el('thWord').addEventListener('input',   e => el('thWordVal').textContent   = Number(e.target.value).toFixed(1), {passive:true});
+  el('thLetter').disabled = true; el('thLetterVal').textContent = '1.5s';
+  el('thWord').addEventListener('input', e => el('thWordVal').textContent = Number(e.target.value).toFixed(1), {passive:true});
 
   // Limpar captura
   el('clearCapture').addEventListener('click', () => { captureSeq=''; renderCapture(); });
@@ -285,17 +220,12 @@
   }
   table.appendChild(frag);
 
-  // Acessibilidade: foco no manipulador
+  // Foco inicial na chave
   setTimeout(()=>{ try{ el('key').focus(); }catch{} }, 300);
 
-  // Preenchimento inicial
-  el('plain').value = 'SOS precisamos de ajuda';
-  el('morse').value = textToMorse(el('plain').value);
-
-  // Limpeza ao sair
+  // Limpeza
   window.addEventListener('beforeunload', () => {
-    clearTimeout(letterTimer);
-    clearTimeout(wordTimer);
+    clearTimeout(letterTimer); clearTimeout(wordTimer);
     try{ osc?.disconnect(); gain?.disconnect(); }catch{}
   });
 })();
